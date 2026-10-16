@@ -229,16 +229,34 @@ void Payload::buttonGenerate()
             .OneTime = "true",
     };
 
-    auto Body = Util::Packager::Body_t {
+    Util::Packager::Body_t Body;
+
+    if (HavocX::Callbacks.contains(CALLBACK_UDRL_GENERATE)) {
+        Body = Util::Packager::Body_t {
             .SubEvent = Util::Packager::Gate::Stageless,
             .Info = {
-                { "AgentType", this->ComboAgentType->currentText().toStdString() },
-                { "Listener",  this->ComboListener->currentText().toStdString() },
-                { "Arch",      this->ComboArch->currentText().toStdString() },
-                { "Format",    this->ComboFormat->currentText().toStdString() },
-                { "Config",    Config },
-            },
-    };
+                        { "AgentType", this->ComboAgentType->currentText().toStdString() },
+                        { "Listener",  this->ComboListener->currentText().toStdString() },
+                        { "Arch",      this->ComboArch->currentText().toStdString() },
+                        { "Format",     this->ComboFormat->currentText().toStdString() },
+                        { "Config",    Config },
+                        { "UDRLMode",  "true"}
+                    },
+        };
+    } else {
+        Body = Util::Packager::Body_t {
+            .SubEvent = Util::Packager::Gate::Stageless,
+            .Info = {
+                    { "AgentType", this->ComboAgentType->currentText().toStdString() },
+                    { "Listener",  this->ComboListener->currentText().toStdString() },
+                    { "Arch",      this->ComboArch->currentText().toStdString() },
+                    { "Format",    this->ComboFormat->currentText().toStdString() },
+                    { "Config",    Config },
+                    { "UDRLMode",  "false"}
+                },
+        };
+    }
+
 
     Package->Head = Head;
     Package->Body = Body;

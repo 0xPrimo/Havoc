@@ -42,6 +42,7 @@ const int Util::Packager::Chat::UserDisconnect      = 0x5;
 const int Util::Packager::Gate::Type                = 0x5;
 const int Util::Packager::Gate::Staged              = 0x1;
 const int Util::Packager::Gate::Stageless           = 0x2;
+const int Util::Packager::Gate::UserDefinedReflectiveLoader = 0x4;
 
 const int Util::Packager::Session::Type             = 0x7;
 const int Util::Packager::Session::NewSession       = 0x1;
@@ -537,10 +538,83 @@ bool Packager::DispatchGate( Util::Packager::PPackage Package )
         {
             break;
         }
+        case Util::Packager::Gate::UserDefinedReflectiveLoader:
+        {
+            QByteArray  UDRLPayload           = nullptr;
+            auto        DemonBase64 = QString( Package->Body.Info[ "PayloadArray" ].c_str() ).toLocal8Bit();
+            auto        DemonFileName         = QString( Package->Body.Info[ "FileName" ].c_str() );
+            auto        DemonArch    = DemonFileName.contains(".x64.") ? "x64" : "x86";
 
+            // call the registered callback
+            {
+                auto DemonPayload= QByteArray::fromBase64( DemonBase64 );
+                auto Callback = HavocX::Callbacks[CALLBACK_UDRL_GENERATE];
+                if (!Callback) {
+                    return false;
+                }
+
+                PyGILState_STATE    Lock        = PyGILState_Ensure();
+                PyObject*           Result      = PyObject_CallFunction(Callback, "ssy#", DemonFileName.toStdString().c_str(), DemonArch, DemonPayload.constData(), (Py_ssize_t)DemonPayload.size());
+                if (Result && PyBytes_Check(Result)) {
+                    char*       ReturnedData = nullptr;
+                    Py_ssize_t  ReturnedSize = 0;
+
+                    if (PyBytes_AsStringAndSize(Result, &ReturnedData, &ReturnedSize) == 0) {
+                        UDRLPayload = QByteArray(ReturnedData, ReturnedSize);
+                    }
+                }
+                else {
+                    Py_DECREF(Result);
+                    PyGILState_Release(Lock);
+                    return false;
+                }
+
+                Py_DECREF(Result);
+                PyGILState_Release(Lock);
+            }
+
+            // client only wants the raw shellcode
+            if (DemonFileName.endsWith(".bin")) {
+                HavocX::Teamserver.TabSession->PayloadDialog->ReceivedImplantAndSave( DemonFileName, UDRLPayload );
+                return true;
+            }
+
+
+            // build the payload (exe,dll,svc)
+            {
+                auto ServiceName = QString();
+                if (DemonFileName.contains(".svc.")) {
+                    ServiceName = QString( Package->Body.Info[ "ServiceName" ].c_str() );
+                }
+
+                auto Package = new Util::Packager::Package;
+                auto Head = Util::Packager::Head_t {
+                    .Event   = Util::Packager::Gate::Type,
+                    .User    = HavocX::Teamserver.User.toStdString(),
+                    .Time    = CurrentTime().toStdString(),
+                    .OneTime = "true",
+                };
+
+                auto Body = Util::Packager::Body_t {
+                    .SubEvent = Util::Packager::Gate::UserDefinedReflectiveLoader,
+                    .Info = {
+                        { "FileName", DemonFileName.toStdString() },
+                        { "Payload",   UDRLPayload.toBase64().toStdString() },
+                        { "ServiceName",   ServiceName.toStdString() },
+                    }
+                };
+
+
+                Package->Head = Head;
+                Package->Body = Body;
+                HavocX::Connector->SendPackage( Package );
+
+            }
+
+            break;
+        }
         case Util::Packager::Gate::Stageless:
         {
-
             if ( Package->Body.Info[ "PayloadArray" ].size() > 0 )
             {
                 auto PayloadArray = QString( Package->Body.Info[ "PayloadArray" ].c_str() ).toLocal8Bit();

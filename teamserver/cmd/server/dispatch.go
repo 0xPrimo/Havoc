@@ -1,9 +1,11 @@
 package server
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -807,6 +809,105 @@ func (t *Teamserver) DispatchEvent(pk packager.Package) {
 	case packager.Type.Gate.Type:
 
 		switch pk.Body.SubEvent {
+		case packager.Type.Gate.UserDefinedReflectiveLoader:
+			var (
+				FileName       = pk.Body.Info["FileName"].(string)
+				Payload        = pk.Body.Info["Payload"].(string)
+				ServiceName    = pk.Body.Info["ServiceName"].(string)
+				ClientId       string
+				SendConsoleMsg func(MsgType, Message string)
+			)
+
+			UserDefinedReflectiveLoader, err := base64.StdEncoding.DecodeString(Payload)
+			if err != nil {
+				logger.Error("Couldn't decode UDRL payload: " + err.Error())
+				return
+			}
+
+			SendConsoleMsg = func(MsgType, Message string) {
+				err := t.SendEvent(ClientId, events.Gate.SendConsoleMessage(MsgType, Message))
+				if err != nil {
+					logger.Error("Couldn't send Event: " + err.Error())
+					return
+				}
+			}
+
+			t.Clients.Range(func(key, value any) bool {
+				Client := value.(*Client)
+				if Client.Username == pk.Head.User {
+					ClientId = Client.ClientID
+					return false
+				}
+				return true
+			})
+
+			var PayloadBuilder = builder.NewBuilder(builder.BuilderConfig{
+				Compiler64: t.Settings.Compiler64,
+				Compiler86: t.Settings.Compiler32,
+				Nasm:       t.Settings.Nasm,
+				DebugDev:   t.Flags.Server.DebugDev,
+				SendLogs:   t.Flags.Server.SendLogs,
+			})
+
+			PayloadBuilder.ClientId = ClientId
+
+			if PayloadBuilder.ClientId == "" {
+				logger.Error("Couldn't find the Client")
+				return
+			}
+
+			PayloadBuilder.SendConsoleMessage = SendConsoleMsg
+
+			var Ext string
+			if strings.Contains(FileName, ".x64") {
+				PayloadBuilder.SetArch(builder.ARCHITECTURE_X64)
+				Ext = "x64"
+			} else {
+				PayloadBuilder.SetArch(builder.ARCHITECTURE_X86)
+				Ext = "x86"
+			}
+
+			if strings.Contains(FileName, ".svc.exe") {
+				PayloadBuilder.SetFormat(builder.FILETYPE_WINDOWS_SERVICE_EXE)
+				PayloadBuilder.SetDefines("SERVICE_NAME", "\\\""+ServiceName+"\\\"")
+				Ext += "svc.exe"
+			} else if strings.Contains(FileName, ".dll") {
+				PayloadBuilder.SetFormat(builder.FILETYPE_WINDOWS_DLL)
+				Ext += ".dll"
+			} else if strings.Contains(FileName, ".exe") {
+				PayloadBuilder.SetFormat(builder.FILETYPE_WINDOWS_EXE)
+				Ext += ".exe"
+			}
+
+			UDRLHeader := `__attribute__((section(".text"))) BYTE UserDefinedReflectiveLoader[] = `
+			UDRLHeader += "{"
+			for i := range UserDefinedReflectiveLoader {
+				if i == (len(UserDefinedReflectiveLoader) - 1) {
+					UDRLHeader += fmt.Sprintf("0x%02x", UserDefinedReflectiveLoader[i])
+				} else {
+					UDRLHeader += fmt.Sprintf("0x%02x,", UserDefinedReflectiveLoader[i])
+				}
+			}
+			UDRLHeader += "};"
+
+			err = os.WriteFile("/tmp/UserDefinedReflectiveLoader.h", []byte(UDRLHeader), 0644)
+			if err != nil {
+				logger.Error("Error writing UserDefinedReflectiveLoader.h file: " + err.Error())
+				return
+			}
+
+			PayloadBuilder.SetExtension(Ext)
+			if PayloadBuilder.BuildUserDefinedReflectiveLoader() {
+				pal := PayloadBuilder.GetPayloadBytes()
+				if len(pal) > 0 {
+					err = t.SendEvent(ClientId, events.Gate.SendStageless(FileName, pal))
+					if err != nil {
+						logger.Error("Error while sending event: " + err.Error())
+						return
+					}
+				}
+			}
+
 		case packager.Type.Gate.Stageless:
 			var (
 				AgentType      = pk.Body.Info["AgentType"].(string)
@@ -814,6 +915,7 @@ func (t *Teamserver) DispatchEvent(pk packager.Package) {
 				Arch           = pk.Body.Info["Arch"].(string)
 				Format         = pk.Body.Info["Format"].(string)
 				Config         = pk.Body.Info["Config"].(string)
+				UDRLMode       = pk.Body.Info["UDRLMode"].(string)
 				SendConsoleMsg func(MsgType, Message string)
 				ClientID       string
 			)
@@ -885,7 +987,7 @@ func (t *Teamserver) DispatchEvent(pk packager.Package) {
 						Ext += ".exe"
 					} else if Format == "Windows Service Exe" {
 						PayloadBuilder.SetFormat(builder.FILETYPE_WINDOWS_SERVICE_EXE)
-						Ext += ".exe"
+						Ext += ".svc.exe"
 					} else if Format == "Windows Dll" {
 						PayloadBuilder.SetFormat(builder.FILETYPE_WINDOWS_DLL)
 						Ext += ".dll"
@@ -900,6 +1002,10 @@ func (t *Teamserver) DispatchEvent(pk packager.Package) {
 						return
 					}
 
+					if UDRLMode == "true" {
+						PayloadBuilder.SetFormat(builder.FILETYPE_WINDOWS_EXE)
+					}
+
 					for i := 0; i < len(t.Listeners); i++ {
 						if t.Listeners[i].Name == ListenerName {
 							PayloadBuilder.SetListener(t.Listeners[i].Type, t.Listeners[i].Config)
@@ -912,10 +1018,22 @@ func (t *Teamserver) DispatchEvent(pk packager.Package) {
 						PayloadBuilder.SetPatchConfig(t.Profile.Config.Demon.Binary)
 					}
 
+					if UDRLMode == "true" {
+						PayloadBuilder.SetDefines("UDRL", "1")
+					}
+
 					if PayloadBuilder.Build() {
 						pal := PayloadBuilder.GetPayloadBytes()
 						if len(pal) > 0 {
-							err := t.SendEvent(PayloadBuilder.ClientId, events.Gate.SendStageless("demon"+Ext, pal))
+							var pkg packager.Package
+
+							if UDRLMode == "true" {
+								pkg = events.Gate.SendUDRL("demon"+Ext, ConfigMap, pal)
+							} else {
+								pkg = events.Gate.SendStageless("demon"+Ext, pal)
+							}
+
+							err := t.SendEvent(PayloadBuilder.ClientId, pkg)
 							if err != nil {
 								logger.Error("Error while sending event: " + err.Error())
 								return

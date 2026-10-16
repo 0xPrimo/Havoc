@@ -86,6 +86,7 @@ type (
 
 			Staged    int
 			Stageless int
+			UserDefinedReflectiveLoader int
 			MSOffice  int
 		}
 
@@ -212,11 +213,13 @@ var Type = Types{
 		Type      int
 		Staged    int
 		Stageless int
+		UserDefinedReflectiveLoader      int
 		MSOffice  int
 	}{
 		Type:      0x5,
 		Staged:    0x1,
 		Stageless: 0x2,
+		UserDefinedReflectiveLoader:      0x4,
 		MSOffice:  0x3,
 	},
 

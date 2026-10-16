@@ -58,6 +58,8 @@ typedef unsigned long int   UINT_PTR;
 typedef std::map<std::string, std::string> MapStrStr;
 typedef std::map<std::string, std::any>    MapStrAny;
 
+#define CALLBACK_UDRL_GENERATE 1
+
 /* TODO: rewrite everything.
  *       this is a stupid design
  *       move every class into its own header
@@ -276,6 +278,7 @@ namespace HavocX
 {
     extern bool                                     DebugMode;
     extern bool                                     GateGUI;
+    extern std::map<int, PyObject*>                 Callbacks;
     extern PyObject*                                callbackGate;
     extern PyObject*                                callbackMessage;
     extern HavocNamespace::Util::ConnectionInfo     Teamserver;
