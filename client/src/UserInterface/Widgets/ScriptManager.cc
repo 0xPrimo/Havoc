@@ -112,16 +112,28 @@ bool ScriptManager::AddScript( QString Path )
 {
     auto Script = FileRead( Path );
     auto path   = Path.toStdString();
-    int  Return = 0;
 
-    HavocX::Teamserver.LoadingScript = Path.toStdString();
+    QString scriptPath = QFileInfo( Path ).absoluteFilePath();
+    HavocX::Teamserver.LoadingScript = scriptPath.toStdString();
 
     if ( Script != nullptr ) {
         if ( ! Script.isEmpty() ) {
-            Return = PyRun_SimpleStringFlags( Script.toStdString().c_str(), NULL );
-            if ( Return == -1 ) {
+            PyObject* globals = PyDict_New();
+            PyDict_SetItemString( globals, "__builtins__", PyEval_GetBuiltins() );
+
+            PyObject* p = PyUnicode_FromString( scriptPath.toUtf8().constData() );
+            PyDict_SetItemString( globals, "__script_path__", p );
+            Py_DECREF( p );
+
+            PyObject* result = PyRun_String( Script.toStdString().c_str(),
+                                             Py_file_input, globals, globals );
+            Py_DECREF( globals );
+
+            if ( result == nullptr ) {
+                PyErr_Print();
                 spdlog::error( "Failed to run script: {}", path );
             } else {
+                Py_DECREF( result );
                 return true;
             }
         }
@@ -133,7 +145,6 @@ bool ScriptManager::AddScript( QString Path )
     }
 
     HavocX::Teamserver.LoadingScript = "";
-
     return false;
 }
 
@@ -206,6 +217,8 @@ void ScriptManager::RemoveScript() const
     auto Path = tableLoadedScripts->item( tableLoadedScripts->currentRow(), 0 )->text();
 
     tableLoadedScripts->removeRow( tableLoadedScripts->currentRow() );
+    if (HavocX::Callbacks.size() > 0)
+        HavocX::Callbacks.clear();
 
     HavocX::Teamserver.TabSession->dbManager->RemoveScript( Path );
 }

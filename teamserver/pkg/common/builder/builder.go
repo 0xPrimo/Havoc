@@ -214,6 +214,114 @@ func (b *Builder) SetSilent(silent bool) {
 	b.silent = silent
 }
 
+func (b *Builder) BuildUserDefinedReflectiveLoader() bool {
+	var (
+		CompileCommand string
+	)
+
+	b.CompileDir = "/tmp/" + utils.GenerateID(10) + "/"
+	err := os.Mkdir(b.CompileDir, os.ModePerm)
+	if err != nil {
+		logger.Error("Failed to create compile directory: " + err.Error())
+		return false
+	}
+
+	if b.outputPath == "" && b.FileExtenstion != "" {
+		b.SetOutputPath(b.CompileDir + PayloadName + b.FileExtenstion)
+	}
+
+	if b.FileType == FILETYPE_WINDOWS_SERVICE_EXE {
+		b.compilerOptions.CFlags[0] = "-mwindows -ladvapi32"
+	} else {
+		b.compilerOptions.CFlags[0] += " -nostdlib -lkernel32 -mwindows"
+	}
+
+	// add compiler
+	if b.config.Arch == ARCHITECTURE_X64 {
+		abs, err := filepath.Abs(b.compilerOptions.Config.Compiler64)
+
+		if err != nil {
+			if !b.silent {
+				b.SendConsoleMessage("Error", fmt.Sprintf("failed to resolve x64 compiler path: %v", err))
+				return false
+			}
+		}
+		b.compilerOptions.Config.Compiler64 = abs
+
+		CompileCommand += "\"" + b.compilerOptions.Config.Compiler64 + "\" "
+	} else {
+		abs, err := filepath.Abs(b.compilerOptions.Config.Compiler86)
+
+		if err != nil {
+			if !b.silent {
+				b.SendConsoleMessage("Error", fmt.Sprintf("failed to resolve x86 compiler path: %v", err))
+				return false
+			}
+		}
+		b.compilerOptions.Config.Compiler86 = abs
+
+		CompileCommand += "\"" + b.compilerOptions.Config.Compiler86 + "\" "
+	}
+
+	switch b.FileType {
+	case FILETYPE_WINDOWS_EXE:
+		if b.config.Arch == ARCHITECTURE_X64 {
+			CompileCommand += " -D MAIN_THREADED -D UDRL_EXE -e WinMain "
+		} else {
+			CompileCommand += " -D MAIN_THREADED -D UDRL_EXE -e _WinMain "
+		}
+		CompileCommand += b.compilerOptions.Main.Exe + " "
+		break
+
+	case FILETYPE_WINDOWS_SERVICE_EXE:
+		logger.Debug("Compile Service exe")
+		if b.config.Arch == ARCHITECTURE_X64 {
+			CompileCommand += "-D MAIN_THREADED -D SVC_EXE -D UDRL_SVC -lntdll -e WinMain "
+		} else {
+			CompileCommand += "-D MAIN_THREADED -D SVC_EXE -D UDRL_SVC -lntdll -e _WinMain "
+		}
+
+		CompileCommand += b.compilerOptions.Main.Svc + " "
+		break
+
+	case FILETYPE_WINDOWS_DLL:
+		logger.Debug("Compile dll")
+		if b.config.Arch == ARCHITECTURE_X64 {
+			CompileCommand += "-shared -D UDRL_DLL -e DllMain "
+		} else {
+			CompileCommand += "-shared -D UDRL_DLL -e _DllMain "
+		}
+		CompileCommand += b.compilerOptions.Main.Dll + " "
+		break
+	}
+
+	// add include directories
+	for _, dir := range b.compilerOptions.IncludeDirs {
+		CompileCommand += "-I" + dir + " "
+	}
+
+	CompileCommand += "-I/tmp "
+
+	// add cflags
+	CompileCommand += strings.Join(b.compilerOptions.CFlags, " ")
+
+	// add defines
+	b.compilerOptions.Defines = append(b.compilerOptions.Defines, b.GetListenerDefines()...)
+	for _, define := range b.compilerOptions.Defines {
+		CompileCommand += " -D" + define + " "
+	}
+
+	CompileCommand += " -o " + b.outputPath
+
+	if !b.silent {
+		b.SendConsoleMessage("Info", "compiling user-defined reflective loader payload")
+	}
+
+	Successful := b.CompileCmd(CompileCommand)
+
+	return Successful
+}
+
 func (b *Builder) Build() bool {
 	var (
 		CompileCommand string
@@ -277,7 +385,8 @@ func (b *Builder) Build() bool {
 		if b.FileType == FILETYPE_WINDOWS_SERVICE_EXE {
 			b.compilerOptions.CFlags[0] = "-mwindows -ladvapi32"
 		} else {
-			b.compilerOptions.CFlags[0] += " -nostdlib -mwindows"
+			//b.compilerOptions.CFlags[0] += " -mwindows"
+			b.compilerOptions.CFlags[0] += " -nostdlib -lkernel32 -mwindows"
 		}
 	}
 
@@ -480,6 +589,10 @@ func (b *Builder) SetPatchConfig(Config any) {
 
 func (b *Builder) SetFormat(Format int) {
 	b.FileType = Format
+}
+
+func (b *Builder) SetDefines(key, value string) {
+	b.compilerOptions.Defines = append(b.compilerOptions.Defines, key+"="+value)
 }
 
 func (b *Builder) SetArch(Arch int) {

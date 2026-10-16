@@ -25,8 +25,12 @@ PVOID LdrModulePebString( PCHAR ModuleString )
 
 PVOID LdrFunctionAddrString( PVOID Module, PCHAR Function )
 {
+#ifdef UDRL
+    return GetProcAddress( Module, Function );
+#else
     PRINTF( "Module:[%p] Function:[%s : %lx]\n", Module, Function, HashEx( Function, 0, TRUE ) )
     return LdrFunctionAddr( Module, HashEx( Function, 0, TRUE ) );
+#endif
 }
 
 BOOL LdrFreeLibrary( HMODULE hLibModule )

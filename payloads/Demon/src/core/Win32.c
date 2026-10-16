@@ -374,6 +374,7 @@ END:
  * @param FunctionHash
  * @return
  */
+#ifndef UDRL
 PVOID LdrFunctionAddr(
     IN PVOID Module,
     IN DWORD Hash
@@ -431,7 +432,7 @@ PVOID LdrFunctionAddr(
 
     return NULL;
 }
-
+#endif
 /*
  * Get the size of an NtApi by finding two consecutive syscalls
  * and returning the difference of their addresses.

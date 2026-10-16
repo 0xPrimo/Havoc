@@ -26,6 +26,8 @@ namespace PythonAPI
             PY_FUNCTION_KW( RegisterCommand )
             PY_FUNCTION( RegisterModule )
             PY_FUNCTION( RegisterCallback )
+            PY_FUNCTION( PayloadConsoleWrite )
+            PY_FUNCTION( ScriptResource )
         }
 
         namespace PyModule

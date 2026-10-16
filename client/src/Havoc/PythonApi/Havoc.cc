@@ -9,11 +9,13 @@
 #include <Havoc/PythonApi/PyAgentClass.hpp>
 #include <Havoc/PythonApi/Event.h>
 
+#include <UserInterface/Widgets/TeamserverTabSession.h>
 #include <UserInterface/Widgets/DemonInteracted.h>
 
 #include <QCompleter>
 
 using namespace HavocNamespace::Util;
+
 
 namespace PythonAPI::Havoc
 {
@@ -26,7 +28,8 @@ namespace PythonAPI::Havoc
             { "RegisterCommand",  ( PyCFunction ) PythonAPI::Havoc::Core::RegisterCommand, METH_VARARGS | METH_KEYWORDS, "register a command/alias" },
             { "RegisterModule",   PythonAPI::Havoc::Core::RegisterModule,                  METH_VARARGS,                 "register a module"        },
             { "RegisterCallback", PythonAPI::Havoc::Core::RegisterCallback,                METH_VARARGS,                 "register a callback"      },
-
+            { "ScriptResource",   PythonAPI::Havoc::Core::ScriptResource,                METH_VARARGS,                 "resolve script resouce absolute path"      },
+            { "PayloadConsoleWrite",  PythonAPI::Havoc::Core::PayloadConsoleWrite, METH_VARARGS, "Prints messages to the payload builder console" },
             { NULL, NULL, 0, NULL }
     };
 
@@ -318,13 +321,44 @@ PyObject* PythonAPI::Havoc::Core::RegisterModule( PyObject *self, PyObject *args
     Py_RETURN_NONE;
 }
 
+PyObject* PythonAPI::Havoc::Core::ScriptResource( PyObject* self, PyObject* args ) {
+    const char* Name = nullptr;
+    if ( ! PyArg_ParseTuple( args, "s", &Name ) )   // resource name, required
+        return nullptr;
+
+    PyObject* Globals = PyEval_GetGlobals();
+    PyObject* Path = Globals ? PyDict_GetItemString( Globals, "__script_path__" ) : nullptr;
+    if ( ! Path ) {
+        PyErr_SetString( PyExc_RuntimeError, "ScriptResource: no script context" );
+        return nullptr;
+    }
+
+    QString scriptPath = QString::fromUtf8( PyUnicode_AsUTF8( Path ) );
+    QString dir        = QFileInfo( scriptPath ).absolutePath();
+    QString resolved   = QDir::cleanPath( QDir( dir ).absoluteFilePath( QString::fromUtf8( Name ) ) );
+
+    return PyUnicode_FromString( resolved.toUtf8().constData() );
+}
+
+PyObject* PythonAPI::Havoc::Core::PayloadConsoleWrite( PyObject *self, PyObject *args ) {
+    char*   Type    = nullptr;
+    char*   Message = nullptr;
+
+    if( ! PyArg_ParseTuple( args, "ss", &Type, &Message ) )
+        Py_RETURN_NONE;
+
+    HavocX::Teamserver.TabSession->PayloadDialog->addConsoleLog( Type, Message);
+
+    Py_RETURN_NONE;
+}
+
 PyObject* PythonAPI::Havoc::Core::RegisterCallback( PyObject *self, PyObject *args )
 {
     spdlog::debug( "PythonAPI::Havoc::Core::RegisterCallback" );
+    int         CallbackType = 0;
+    PyObject*   Callback = nullptr;
 
-    PyObject* Callback = nullptr;
-
-    if ( ! PyArg_ParseTuple( args, "O", &Callback ) )
+    if ( ! PyArg_ParseTuple( args, "iO", &CallbackType, &Callback ) )
     {
         spdlog::error( "Invalid parameters on RegisterCallback" );
         return nullptr;
@@ -336,8 +370,21 @@ PyObject* PythonAPI::Havoc::Core::RegisterCallback( PyObject *self, PyObject *ar
         return nullptr;
     }
 
-    HavocX::Teamserver.RegisteredCallbacks.push_back( Callback );
-    Py_XINCREF( Callback );
+    switch (CallbackType) {
+        case CALLBACK_UDRL_GENERATE:
+        {
+            Py_XINCREF(Callback);
+
+            auto it = HavocX::Callbacks.find(CallbackType);
+            if (it != HavocX::Callbacks.end())
+                Py_XDECREF(it->second);
+
+            HavocX::Callbacks[CallbackType] = Callback;
+            break;
+        }
+        default:
+            spdlog::error( "Callback type not supported" );
+    }
 
     Py_RETURN_NONE;
 }

