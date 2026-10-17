@@ -2,6 +2,7 @@
 #include <UserInterface/Widgets/TeamserverTabSession.h>
 
 #include <Havoc/DBManager/DBManager.hpp>
+#include <Havoc/PythonApi/PythonApi.h>
 
 #include <QFile>
 #include <QHeaderView>
@@ -124,6 +125,17 @@ bool ScriptManager::AddScript( QString Path )
             PyObject* p = PyUnicode_FromString( scriptPath.toUtf8().constData() );
             PyDict_SetItemString( globals, "__script_path__", p );
             Py_DECREF( p );
+
+            // load shared libraries
+            for ( const auto& lib : PythonAPI::Havoc::SharedLibs) {
+                QString LibSrc = FileRead( lib.c_str() );
+                if ( LibSrc == nullptr || LibSrc.isEmpty() ) continue;
+
+                PyObject* r = PyRun_String( LibSrc.toStdString().c_str(),
+                                            Py_file_input, globals, globals );
+                if ( r == nullptr ) { PyErr_Print(); Py_DECREF( globals ); return false; }
+                Py_DECREF( r );
+            }
 
             PyObject* result = PyRun_String( Script.toStdString().c_str(),
                                              Py_file_input, globals, globals );

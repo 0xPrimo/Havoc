@@ -15,6 +15,7 @@ namespace PythonAPI
     namespace Havoc
     {
         extern PyMethodDef PyMethode_Havoc[];
+        extern std::vector<std::string> SharedLibs;
 
         namespace Core
         {

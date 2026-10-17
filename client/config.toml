@@ -3,8 +3,10 @@ size   = 9
 family = "Monospace"
 
 [scripts]
+libs = [
+  "client/Modules/Packer/packer.py"
+]
 files = [
-  "client/Modules/Packer/packer.py",
   "client/Modules/InvokeAssembly/invokeassembly.py",
   "client/Modules/PowerPick/powerpick.py",
   "client/Modules/SituationalAwareness/SituationalAwareness.py",

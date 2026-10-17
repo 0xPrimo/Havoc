@@ -1,5 +1,7 @@
 #include <Havoc/PythonApi/PythonApi.h>
 
+std::vector<std::string> PythonAPI::Havoc::SharedLibs;
+
 namespace emb
 {
     PyObject* Stdout_write(PyObject* self, PyObject* args)

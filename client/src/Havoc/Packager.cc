@@ -4,6 +4,7 @@
 #include <Havoc/Packager.hpp>
 #include <Havoc/DemonCmdDispatch.h>
 #include <Havoc/Connector.hpp>
+#include <Havoc/PythonApi/PythonApi.h>
 
 #include <UserInterface/Widgets/TeamserverTabSession.h>
 #include <UserInterface/SmallWidgets/EventViewer.hpp>
@@ -179,6 +180,7 @@ bool Packager::DispatchInitConnection( Util::Packager::PPackage Package )
 
                 const auto  scripts = toml::find( HavocApplication->Config, "scripts" );
                 const auto& files   = toml::find<std::vector<std::string>>( scripts, "files" );
+                PythonAPI::Havoc::SharedLibs    = toml::find<std::vector<std::string>>( scripts, "libs" );
 
                 for ( const auto& file : files ) {
                     ScriptManager::AddScript( file.c_str() );
